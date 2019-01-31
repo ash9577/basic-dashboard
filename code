@@ -1,0 +1,74 @@
+library(shiny)
+library(ggplot2)
+library(DT)
+library(dplyr)
+library(magrittr)
+
+dataset <- read.csv("C:/Users/Alexander/Desktop/application1/df6.csv", sep = ";", stringsAsFactors = TRUE)
+colnames(dataset) <- c("OrderID", "CustomerID", "EmployeeID", "OrderDate", "Freight", "ShipCountry")
+dataset$OrderDate <- as.Date.character(dataset$OrderDate)
+dataset$Freight <- as.numeric(dataset$Freight)
+employees <- sort(unique(dataset$EmployeeID))
+
+ui <- fluidPage(
+  sidebarLayout(
+    
+    sidebarPanel(
+      dateRangeInput(inputId = "daterange",
+                     label = "Select Dates",
+                     min = min(dataset$OrderDate),
+                     max = max(dataset$OrderDate),
+                     start = min(dataset$OrderDate),
+                     end = max(dataset$OrderDate)
+                     ),
+      selectInput(inputId = "employees",
+                  label = "Select An employee",
+                  choices = employees,
+                  selected = min(employees)),
+      hr(),
+      textInput(inputId = "customer",
+                label = "Find customer by ID",
+                value = "TRADH")
+      
+    ),
+    mainPanel(
+      plotOutput("mainplot", width = "100%", height = "500px", brush = "plot_brush"),
+      dataTableOutput(outputId = "table1"),
+      hr(),
+      h3("CustomerID filter table"),
+      dataTableOutput(outputId = "table2"),
+      h3("Summary"),
+      verbatimTextOutput("overall")
+    )
+  )
+)
+
+server <- function(input, output) {
+  selected <- reactive({
+    dataset %>%
+      filter(OrderDate >= input$daterange[1] & OrderDate <= input$daterange[2]) %>%
+      filter(EmployeeID == input$employees)
+  })
+  selected2 <- reactive({
+    dataset %>%
+      filter(CustomerID == input$customer)
+  })
+  output$mainplot <- renderPlot({
+    ggplot(selected(), aes(x = OrderDate, y = Freight, size = Freight, color = Freight)) +
+      geom_point()
+  })
+  output$table1 <- renderDataTable({
+    brushedPoints(selected(), brush = input$plot_brush)
+  })
+  output$table2 <- renderDataTable({
+    selected2()
+  })
+  output$overall <- renderPrint({selected2() %>%
+    summarise(TotalOrders = n(),
+           ARPU = round(mean(Freight), 2),
+           Median = median(Freight),
+           FirstOrder = min(OrderDate),
+           LastOrder = max(OrderDate))
+})
+}
+shinyApp(ui = ui, server = server)
